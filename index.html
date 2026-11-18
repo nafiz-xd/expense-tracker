@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Tracker — Daily Income & Expense</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:#111827; color:#e5e7eb; min-height:100vh; padding:28px 16px 60px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  h1 { text-align:center; font-size:29px; }
+  h1 span { color:#34d399; }
+  .sub { text-align:center; color:#9ca3af; margin:8px 0 24px; font-size:15px; }
+  .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  .sum { background:#1f2937; border:1px solid #374151; border-radius:12px; padding:16px; text-align:center; }
+  .sum .label { color:#9ca3af; font-size:13px; }
+  .sum .val { font-size:23px; font-weight:800; margin-top:4px; }
+  .balance .val { color:#f9fafb; } .income .val { color:#34d399; } .expense .val { color:#f87171; }
+  .card { background:#1f2937; border:1px solid #374151; border-radius:14px; padding:20px; margin-bottom:18px; }
+  .card h3 { margin-bottom:14px; font-size:17px; }
+  .form { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+  .form .full { grid-column:1 / -1; }
+  input, select { width:100%; background:#111827; border:1px solid #374151; color:#e5e7eb; border-radius:8px; padding:10px; font-size:14.5px; }
+  input:focus, select:focus { outline:2px solid #34d399; }
+  .type-toggle { display:flex; gap:10px; }
+  .type-toggle button { flex:1; padding:10px; border-radius:8px; border:1px solid #374151; background:#111827; color:#9ca3af; font-weight:700; cursor:pointer; }
+  .type-toggle button.active-expense { background:#7f1d1d; color:#fecaca; border-color:#991b1b; }
+  .type-toggle button.active-income { background:#064e3b; color:#a7f3d0; border-color:#065f46; }
+  button.add { width:100%; margin-top:12px; padding:12px; background:#34d399; color:#052e22; border:none; border-radius:10px; font-weight:800; font-size:15.5px; cursor:pointer; }
+  .bar-row { display:flex; align-items:center; gap:10px; margin:7px 0; font-size:13.5px; }
+  .bar-row .name { width:96px; color:#d1d5db; }
+  .bar-track { flex:1; background:#111827; border-radius:6px; height:14px; overflow:hidden; }
+  .bar-fill { height:100%; background:#f87171; border-radius:6px; }
+  .bar-row .amt { width:86px; text-align:right; color:#9ca3af; }
+  .entry { display:flex; justify-content:space-between; align-items:center; padding:11px 4px; border-bottom:1px solid #374151; }
+  .entry:last-child { border-bottom:none; }
+  .entry .t { font-weight:600; font-size:15px; }
+  .entry .m { color:#9ca3af; font-size:12.5px; }
+  .entry .a { font-weight:800; }
+  .entry .a.in { color:#34d399; } .entry .a.out { color:#f87171; }
+  .entry .del { background:none; border:none; color:#6b7280; cursor:pointer; font-size:16px; margin-left:10px; }
+  .empty { text-align:center; color:#6b7280; padding:18px 0; }
+  @media (max-width:560px){ .form{grid-template-columns:1fr 1fr} .summary{grid-template-columns:1fr 1fr 1fr} .sum .val{font-size:17px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>💰 Expense <span>Tracker</span></h1>
+  <p class="sub">Track your daily income and expenses. Everything is saved in your own browser — no sign-up, no server.</p>
+
+  <div class="summary">
+    <div class="sum balance"><div class="label">Balance</div><div class="val" id="balance">৳0</div></div>
+    <div class="sum income"><div class="label">Total Income</div><div class="val" id="totalIn">৳0</div></div>
+    <div class="sum expense"><div class="label">Total Expense</div><div class="val" id="totalOut">৳0</div></div>
+  </div>
+
+  <div class="card">
+    <h3>Add Entry</h3>
+    <div class="form">
+      <input id="title" class="full" type="text" placeholder="What is this for? e.g. Lunch, Bus fare, Salary">
+      <input id="amount" type="number" min="1" placeholder="Amount (৳)">
+      <select id="category">
+        <option>Food</option><option>Transport</option><option>Shopping</option>
+        <option>Bills</option><option>Education</option><option>Health</option>
+        <option>Entertainment</option><option>Salary</option><option>Other</option>
+      </select>
+      <input id="date" type="date">
+    </div>
+    <div class="type-toggle" style="margin-top:10px">
+      <button id="btnOut" class="active-expense" onclick="setType('expense')">− Expense</button>
+      <button id="btnIn" onclick="setType('income')">＋ Income</button>
+    </div>
+    <button class="add" onclick="addEntry()">Add Entry</button>
+  </div>
+
+  <div class="card" id="breakdownCard">
+    <h3>Expense by Category</h3>
+    <div id="breakdown"></div>
+  </div>
+
+  <div class="card">
+    <h3>History</h3>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+  const KEY = 'expense-tracker-v1';
+  let type = 'expense';
+  let entries = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    const today = new Date().toISOString().slice(0, 10);
+    return [
+      { title: 'Monthly allowance', amount: 5000, type: 'income', category: 'Salary', date: today },
+      { title: 'Lunch at canteen', amount: 180, type: 'expense', category: 'Food', date: today },
+      { title: 'Bus fare — SEU', amount: 60, type: 'expense', category: 'Transport', date: today },
+      { title: 'Notebook & pen', amount: 220, type: 'expense', category: 'Education', date: today }
+    ];
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch (e) {} }
+  function fmt(n) { return '৳' + n.toLocaleString('en-IN'); }
+  function setType(t) {
+    type = t;
+    document.getElementById('btnOut').className = t === 'expense' ? 'active-expense' : '';
+    document.getElementById('btnIn').className = t === 'income' ? 'active-income' : '';
+  }
+  function addEntry() {
+    const title = document.getElementById('title').value.trim();
+    const amount = parseFloat(document.getElementById('amount').value);
+    const category = document.getElementById('category').value;
+    const date = document.getElementById('date').value || new Date().toISOString().slice(0, 10);
+    if (!title || isNaN(amount) || amount <= 0) { alert('Please enter a title and a valid amount.'); return; }
+    entries.unshift({ title, amount, type, category, date });
+    document.getElementById('title').value = '';
+    document.getElementById('amount').value = '';
+    save(); render();
+  }
+  function removeEntry(i) { entries.splice(i, 1); save(); render(); }
+  function render() {
+    let tin = 0, tout = 0;
+    entries.forEach(e => { if (e.type === 'income') tin += e.amount; else tout += e.amount; });
+    document.getElementById('balance').textContent = fmt(tin - tout);
+    document.getElementById('totalIn').textContent = fmt(tin);
+    document.getElementById('totalOut').textContent = fmt(tout);
+
+    const byCat = {};
+    entries.filter(e => e.type === 'expense').forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    const bd = document.getElementById('breakdown');
+    if (cats.length === 0) { bd.innerHTML = '<div class="empty">No expenses yet.</div>'; }
+    else {
+      const max = cats[0][1];
+      bd.innerHTML = cats.map(([name, amt]) => `
+        <div class="bar-row"><div class="name">${name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(amt / max * 100)}%"></div></div>
+        <div class="amt">${fmt(amt)}</div></div>`).join('');
+    }
+
+    const list = document.getElementById('list');
+    if (entries.length === 0) { list.innerHTML = '<div class="empty">No entries yet — add your first one above.</div>'; return; }
+    list.innerHTML = entries.map((e, i) => `
+      <div class="entry">
+        <div><div class="t">${e.title.replace(/</g, '&lt;')}</div><div class="m">${e.category} · ${e.date}</div></div>
+        <div style="display:flex;align-items:center"><span class="a ${e.type === 'income' ? 'in' : 'out'}">${e.type === 'income' ? '+' : '−'}${fmt(e.amount)}</span><button class="del" title="Delete" onclick="removeEntry(${i})">✕</button></div>
+      </div>`).join('');
+  }
+  document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+  save(); render();
+</script>
+</body>
+</html>
